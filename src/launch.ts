@@ -3,13 +3,11 @@
  * Handles creating and launching new tokens
  */
 
-import { Keypair, TransactionSignature } from '@solana/web3.js';
-import bs58 from 'bs58';
+import { TransactionSignature } from '@solana/web3.js';
 import { getConfig, PUMPPORTAL_API } from './config.js';
 import {
   getKeypairFromPrivateKey,
   getConnection,
-  signAndSendTransaction,
   formatTransactionUrl,
   generateMintKeypair,
   safeExecute,
@@ -65,55 +63,34 @@ interface CreateTokenRequest {
 }
 
 /**
- * Uploads token metadata and image to IPFS via Pump.fun's API
+ * Uploads token metadata and image to IPFS via Pump.fun's API.
+ * Uses Node's built-in FormData/Blob (not the form-data npm package)
+ * to ensure compatibility with pump.fun's server.
  */
 async function uploadToIpfs(
   metadata: TokenMetadata,
   imageSource?: { path?: string; url?: string }
 ): Promise<string> {
-  const FormData = (await import('form-data')).default;
   const fs = await import('fs');
 
-  const formData = new FormData();
+  let imageBuffer: Buffer;
+  let fileName = 'image.png';
 
-  // Add metadata fields
-  formData.append('name', metadata.name);
-  formData.append('symbol', metadata.symbol);
-  formData.append('description', metadata.description);
-  formData.append('showName', metadata.showName ? 'true' : 'false');
-
-  if (metadata.twitter) formData.append('twitter', metadata.twitter);
-  if (metadata.telegram) formData.append('telegram', metadata.telegram);
-  if (metadata.website) formData.append('website', metadata.website);
-
-  // Add image
   if (imageSource?.path) {
-    // Upload from local file
     if (!fs.existsSync(imageSource.path)) {
       throw new Error(`Image file not found: ${imageSource.path}`);
     }
-    const imageBuffer = fs.readFileSync(imageSource.path);
-    const fileName = imageSource.path.split('/').pop() || 'image.png';
-    formData.append('file', imageBuffer, {
-      filename: fileName,
-      contentType: 'image/png',
-    });
+    imageBuffer = fs.readFileSync(imageSource.path) as Buffer;
+    fileName = imageSource.path.split('/').pop() || 'image.png';
   } else if (imageSource?.url) {
-    // Fetch image from URL and upload
     const imageResponse = await fetch(imageSource.url);
     if (!imageResponse.ok) {
       throw new Error(`Failed to fetch image from URL: ${imageSource.url}`);
     }
-    const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
-    formData.append('file', imageBuffer, {
-      filename: 'image.png',
-      contentType: 'image/png',
-    });
+    imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
   } else {
-    // Generate a placeholder image (1x1 transparent PNG)
-    // In production, you should always provide an image
     console.warn('No image provided. Using placeholder. Consider providing an image for better token visibility.');
-    const placeholderPng = Buffer.from([
+    imageBuffer = Buffer.from([
       0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
       0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
       0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00,
@@ -121,17 +98,24 @@ async function uploadToIpfs(
       0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49,
       0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
     ]);
-    formData.append('file', placeholderPng, {
-      filename: 'placeholder.png',
-      contentType: 'image/png',
-    });
+    fileName = 'placeholder.png';
   }
 
-  // Upload to IPFS
+  // Use Node's built-in FormData + Blob (compatible with pump.fun)
+  const blob = new Blob([imageBuffer], { type: 'image/png' });
+  const formData = new FormData();
+  formData.append('name', metadata.name);
+  formData.append('symbol', metadata.symbol);
+  formData.append('description', metadata.description);
+  formData.append('showName', metadata.showName ? 'true' : 'false');
+  if (metadata.twitter) formData.append('twitter', metadata.twitter);
+  if (metadata.telegram) formData.append('telegram', metadata.telegram);
+  if (metadata.website) formData.append('website', metadata.website);
+  formData.append('file', blob, fileName);
+
   const response = await fetch(PUMPPORTAL_API.IPFS_UPLOAD, {
     method: 'POST',
-    body: formData as any,
-    headers: formData.getHeaders(),
+    body: formData,
   });
 
   if (!response.ok) {
@@ -182,7 +166,7 @@ async function executeTokenLaunch(params: LaunchParams): Promise<LaunchResult> {
       symbol: params.metadata.symbol,
       uri: metadataUri,
     },
-    mint: bs58.encode(mintKeypair.secretKey),
+    mint: mintKeypair.publicKey.toBase58(),
     denominatedInSol: 'true',
     amount: params.devBuyAmountSol ?? 0,
     slippage: params.slippage ?? config.defaultSlippage,
