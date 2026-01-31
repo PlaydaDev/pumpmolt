@@ -14,6 +14,9 @@ export type { TradeParams, TradeResult } from './trade.js';
 export { launchToken, validateMetadata } from './launch.js';
 export type { TokenMetadata, LaunchParams, LaunchResult } from './launch.js';
 
+export { burnTokens } from './burn.js';
+export type { BurnParams, BurnResult } from './burn.js';
+
 export { getConfig, PUMPPORTAL_API, SUPPORTED_POOLS } from './config.js';
 export type { PumpConfig, SupportedPool } from './config.js';
 
@@ -24,6 +27,7 @@ export {
   parseAmount,
   formatTransactionUrl,
   formatSol,
+  generateMintKeypair,
 } from './utils.js';
 export type { OperationResult } from './utils.js';
 
@@ -49,5 +53,8 @@ export const VERSION = '1.0.0';
  *   'An awesome token',
  *   { devBuyAmountSol: 1 }
  * );
+ *
+ * // Burn 100% of your tokens
+ * const burnResult = await burnTokens('TOKEN_MINT_ADDRESS', '100%');
  * ```
  */

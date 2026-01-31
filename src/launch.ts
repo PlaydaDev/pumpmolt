@@ -3,7 +3,7 @@
  * Handles creating and launching new tokens
  */
 
-import { TransactionSignature } from '@solana/web3.js';
+import { TransactionSignature, Keypair } from '@solana/web3.js';
 import { getConfig, PUMPPORTAL_API } from './config.js';
 import {
   getKeypairFromPrivateKey,
@@ -31,6 +31,7 @@ export interface LaunchParams {
   devBuyAmountSol?: number;
   slippage?: number;
   priorityFee?: number;
+  mintKeypair?: Keypair;
 }
 
 export interface LaunchResult {
@@ -142,8 +143,8 @@ async function executeTokenLaunch(params: LaunchParams): Promise<LaunchResult> {
   const creatorKeypair = getKeypairFromPrivateKey(config.privateKey);
   const connection = getConnection();
 
-  // Generate a new keypair for the token mint
-  const mintKeypair = generateMintKeypair();
+  // Use provided keypair or generate a new one
+  const mintKeypair = params.mintKeypair ?? generateMintKeypair();
   const mintPublicKey = mintKeypair.publicKey.toBase58();
 
   console.log('Uploading token metadata to IPFS...');
@@ -266,6 +267,7 @@ export async function launchToken(
       devBuyAmountSol: options.devBuyAmountSol,
       slippage: options.slippage,
       priorityFee: options.priorityFee,
+      mintKeypair: options.mintKeypair,
     }),
     'Launch token'
   );

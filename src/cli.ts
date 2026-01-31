@@ -7,6 +7,7 @@
 
 import { buyTokens, sellTokens } from './trade.js';
 import { launchToken } from './launch.js';
+import { burnTokens } from './burn.js';
 import { getConfig } from './config.js';
 
 const HELP_TEXT = `
@@ -19,6 +20,7 @@ Commands:
   buy <mint> <amount_sol> [slippage]     Buy tokens with SOL
   sell <mint> <amount|percent> [slippage] Sell tokens (use "50%" for percentage)
   launch <name> <symbol> <description> [dev_buy_sol]  Launch a new token
+  burn <mint> <amount|percent>           Burn (destroy) tokens permanently
 
 Environment Variables:
   SOLANA_PRIVATE_KEY    Your Solana wallet private key (required)
@@ -38,6 +40,9 @@ Examples:
 
   # Launch a new token
   node cli.js launch "My Token" MTK "The best token ever" 1
+
+  # Burn 100% of tokens
+  node cli.js burn 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU 100%
 `;
 
 async function main() {
@@ -144,6 +149,33 @@ async function main() {
           console.log(`  Pump.fun: ${result.data.pumpFunUrl}`);
         } else {
           console.error('\n✗ Launch failed:', result.error);
+          process.exit(1);
+        }
+        break;
+      }
+
+      case 'burn': {
+        if (args.length < 3) {
+          console.error('Usage: burn <mint> <amount|percent>');
+          process.exit(1);
+        }
+
+        const mint = args[1];
+        const amount = args[2];
+
+        console.log(`\nBurning ${amount} tokens...`);
+        console.log(`Token: ${mint}`);
+        console.log('');
+
+        const result = await burnTokens(mint, amount);
+
+        if (result.success && result.data) {
+          console.log('\n✓ Burn successful!');
+          console.log(`  Amount burned: ${result.data.amountBurned}`);
+          console.log(`  Transaction: ${result.data.signature}`);
+          console.log(`  Explorer: ${result.data.explorerUrl}`);
+        } else {
+          console.error('\n✗ Burn failed:', result.error);
           process.exit(1);
         }
         break;
